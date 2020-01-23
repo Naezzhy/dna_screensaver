@@ -12,20 +12,11 @@
 #include <sys/time.h>
 #include <stdint.h>
 
-inline uint64_t	GetTickCount(void)
-{
-        struct timeval tv;
-        if(gettimeofday(&tv, NULL) != 0)
-                return 0;
-
-        return (uint64_t)(tv.tv_sec * 1000) + (tv.tv_usec / 1000);
-}
-
 inline uint64_t	get_nanosec(void)
 {
 	struct timespec		time;
 	
-	clock_gettime(CLOCK_REALTIME, &time);
+	clock_gettime(CLOCK_MONOTONIC, &time);
 	
 	return (uint64_t)(time.tv_sec*1000000000 + time.tv_nsec);
 }
@@ -34,7 +25,7 @@ inline uint64_t	get_microsec(void)
 {
 	struct timespec		time;
 	
-	clock_gettime(CLOCK_REALTIME, &time);
+	clock_gettime(CLOCK_MONOTONIC, &time);
 	
 	return (uint64_t)(time.tv_sec*1000000 + time.tv_nsec/1000);
 }
@@ -43,7 +34,7 @@ inline uint64_t	get_millisec(void)
 {
 	struct timespec		time;
 	
-	clock_gettime(CLOCK_REALTIME, &time);
+	clock_gettime(CLOCK_MONOTONIC, &time);
 	
 	return (uint64_t)(time.tv_sec*1000 + time.tv_nsec/1000000);
 }
@@ -52,7 +43,7 @@ inline uint32_t	get_sec(void)
 {
 	struct timespec		time;
 	
-	clock_gettime(CLOCK_REALTIME, &time);
+	clock_gettime(CLOCK_MONOTONIC, &time);
 	
 	return time.tv_sec;
 }
@@ -61,28 +52,12 @@ inline uint64_t	get_server_millisec(const int64_t iDeltaMillis)
 {
 	struct timespec		time;
 	
-	clock_gettime(CLOCK_REALTIME, &time);
+	clock_gettime(CLOCK_MONOTONIC, &time);
 	
 	//its true if delta_millis=client_millis - server_millis
 	return (uint64_t)((time.tv_sec*1000000000 + time.tv_nsec)/1000000 - iDeltaMillis);//if 
 }
 
-inline float	get_fps(void)
-{
-	static uint64_t oldMillis=0, newMillis ;
-	static float fFrameCounter=0, fFPS=100, fDelta;
-
-	newMillis=get_millisec();
-	fFrameCounter++;
-	fDelta = newMillis-oldMillis;
-	if( fDelta>1000 )
-	{
-		fFPS = (float)((fFrameCounter/fDelta)*1000);
-		fFrameCounter = 0;
-		oldMillis = newMillis;
-	}
-	return fFPS;
-}
 
 inline float	traf_per_sec(uint64_t	*uNewBytes)
 {
