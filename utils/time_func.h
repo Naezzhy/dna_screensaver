@@ -12,7 +12,18 @@
 #include <sys/time.h>
 #include <stdint.h>
 
-inline uint64_t	get_nanosec(void)
+inline uint64_t	
+get_tick_count(void)
+{
+        struct timeval tv;
+        if(gettimeofday(&tv, NULL) != 0)
+                return 0;
+
+        return (uint64_t)(tv.tv_sec * 1000) + (tv.tv_usec / 1000);
+}
+
+inline uint64_t	
+get_nanosec(void)
 {
 	struct timespec		time;
 	
@@ -21,7 +32,8 @@ inline uint64_t	get_nanosec(void)
 	return (uint64_t)(time.tv_sec*1000000000 + time.tv_nsec);
 }
 
-inline uint64_t	get_microsec(void)
+inline uint64_t	
+get_microsec(void)
 {
 	struct timespec		time;
 	
@@ -30,7 +42,8 @@ inline uint64_t	get_microsec(void)
 	return (uint64_t)(time.tv_sec*1000000 + time.tv_nsec/1000);
 }
 
-inline uint64_t	get_millisec(void)
+inline uint64_t	
+get_millisec(void)
 {
 	struct timespec		time;
 	
@@ -39,7 +52,8 @@ inline uint64_t	get_millisec(void)
 	return (uint64_t)(time.tv_sec*1000 + time.tv_nsec/1000000);
 }
 
-inline uint32_t	get_sec(void)
+inline uint32_t	
+get_sec(void)
 {
 	struct timespec		time;
 	
@@ -48,7 +62,8 @@ inline uint32_t	get_sec(void)
 	return time.tv_sec;
 }
 
-inline uint64_t	get_server_millisec(const int64_t iDeltaMillis)
+inline uint64_t	
+get_server_millisec(const int64_t iDeltaMillis)
 {
 	struct timespec		time;
 	
@@ -58,8 +73,28 @@ inline uint64_t	get_server_millisec(const int64_t iDeltaMillis)
 	return (uint64_t)((time.tv_sec*1000000000 + time.tv_nsec)/1000000 - iDeltaMillis);//if 
 }
 
+/* Warning! This function can only be used in one instance due to the use of static variables. */
+inline float	
+get_fps(void)
+{
+	static uint64_t oldMillis=0, newMillis ;
+	static float fFrameCounter=0, fFPS=100, fDelta;
 
-inline float	traf_per_sec(uint64_t	*uNewBytes)
+	newMillis=get_millisec();
+	fFrameCounter++;
+	fDelta = newMillis-oldMillis;
+	if( fDelta>1000 )
+	{
+		fFPS = (float)((fFrameCounter/fDelta)*1000);
+		fFrameCounter = 0;
+		oldMillis = newMillis;
+	}
+	return fFPS;
+}
+
+/* Warning! This function can only be used in one instance due to the use of static variables.  */
+inline float	
+traf_per_sec(uint64_t	*uNewBytes)
 {
 	uint64_t	static		uOldBytes = 0;
 	uint64_t	static		uOldMillis = 0;
@@ -80,7 +115,8 @@ inline float	traf_per_sec(uint64_t	*uNewBytes)
 	return fTPS;
 }
 
-inline void		sleep_nanosec(uint32_t uiNanosec)
+inline void		
+sleep_nanosec(uint32_t uiNanosec)
 {
 	struct timespec	ts;
 	ts.tv_sec = uiNanosec/1000000000;
@@ -88,7 +124,8 @@ inline void		sleep_nanosec(uint32_t uiNanosec)
 	nanosleep(&ts, NULL);
 }
 
-inline void		sleep_microsec(uint32_t uiMicrosec)
+inline void		
+sleep_microsec(uint32_t uiMicrosec)
 {
 	struct timespec	ts;
 	ts.tv_sec = uiMicrosec/1000000;
@@ -96,7 +133,8 @@ inline void		sleep_microsec(uint32_t uiMicrosec)
 	nanosleep(&ts, NULL);
 }
 
-inline void		sleep_millisec(uint32_t uiMillisec)
+inline void		
+sleep_millisec(uint32_t uiMillisec)
 {
 	struct timespec	ts;
 	ts.tv_sec = uiMillisec/1000;
@@ -104,7 +142,8 @@ inline void		sleep_millisec(uint32_t uiMillisec)
 	nanosleep(&ts, NULL);
 }
 
-inline void		sleep_sec(uint32_t uiSec)
+inline void		
+sleep_sec(uint32_t uiSec)
 {
 	struct timespec	ts;
 	ts.tv_sec = uiSec;
@@ -112,12 +151,13 @@ inline void		sleep_sec(uint32_t uiSec)
 	nanosleep(&ts, NULL);
 }
 
-inline void get_time_string_from_millis(char *szBuff, size_t uBuffSize, uint64_t uMillis)
+inline void 
+get_time_string_from_millis(char *szBuff, size_t uBuffSize, uint64_t uMillis)
 {
 	if(szBuff == NULL || uBuffSize == 0)
 		return;
 	
-	uint32_t uSec = uMillis/1000;
+	uint64_t uSec = uMillis/1000;
 	uint32_t uHours = uSec/3600;
 	uint32_t uMinutes = uSec%3600/60;
 	uint32_t uSeconds = uSec%3600%60;
