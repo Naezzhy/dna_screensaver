@@ -24,7 +24,7 @@
  */
 
 /* 
- * File:   dna_screensaver.cpp
+ * File:   screensaver_dna.cpp
  * Author: Naezzhy Petr(Наезжий Пётр) <petn@mail.ru>
  *
  * Created on 22 января 2020 г., 14:54
@@ -45,26 +45,29 @@
 #include "graphic/glxwindow.h"
 
 
-uint64_t		_uPrevMillis;
-float			_fDelta = 0;
-GLUquadricObj*  _quadrObj = NULL;
-uint64_t		_uCurrMillis;
+uint64_t			_uPrevMillis;
+uint64_t			_uCurrMillis;
+float				_fDelta = 0;
+GLUquadricObj*		_quadrObj = NULL;
+uint8_t				_appExit = 0;
 
-
+uint32_t	const	IMPOSSIBLE_VAL = 9999;
 
 /* Redraw window callback */
 void
-redraw_window(uint8_t initFlag, uint8_t redrawFlag,
-				uint32_t uWidth, uint32_t uHeight)
+redraw_window(cGLXWindow::sWindowState *ws, cGLXWindow::sXMouseCursPos *mousePos)
 {
 
-	GLfloat		const	lightPosition[] = { 1, 1.0f, 2.0f, 0.0f };
-	GLfloat		const	materialSpecular[] = { 0.9f, 0.9f, 0.9f, 1.0f };
+	GLfloat const	lightPosition[] = {1, 1.0f, 2.0f, 0.0f};
+	GLfloat const	materialSpecular[] = {0.9f, 0.9f, 0.9f, 1.0f};
 	
-	if(initFlag)
+	int32_t	static	iStartMousePosX = IMPOSSIBLE_VAL;
+	int32_t	static	iStartMousePosY = IMPOSSIBLE_VAL;
+
+	if (ws->initFlag)
 	{
 		_uPrevMillis = get_millisec();
-		
+
 		glEnable(GL_POLYGON_SMOOTH);
 		glShadeModel(GL_SMOOTH);
 
@@ -76,97 +79,124 @@ redraw_window(uint8_t initFlag, uint8_t redrawFlag,
 		glEnable(GL_COLOR_MATERIAL);
 		glEnable(GL_DEPTH_TEST);
 
-		glLightModelf(GL_LIGHT_MODEL_TWO_SIDE,false);
+		glLightModelf(GL_LIGHT_MODEL_TWO_SIDE, false);
 		glLightfv(GL_LIGHT0, GL_POSITION, lightPosition);
 		glMaterialfv(GL_FRONT, GL_SPECULAR, materialSpecular);
 		glMaterialf(GL_FRONT, GL_SHININESS, 128);
 
 		_quadrObj = gluNewQuadric();
-		
+
 		glDepthFunc(GL_LEQUAL);
 
 		glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 
 		glFlush();
 	}
-	
-	if(redrawFlag)
+
+	if (ws->resizeFlag)
 	{
-		glViewport(0, 0, uWidth, uHeight);
-		
+		glViewport(0, 0, ws->uWidth, ws->uHeight);
+
 		glMatrixMode(GL_PROJECTION);
 		glLoadIdentity();
-		gluPerspective(70,(double)uWidth/uHeight,1,170);
-		gluLookAt( 0,0,1, 0,0,0, 0,1,0 );
+		gluPerspective(70, (double) ws->uWidth / ws->uHeight, 1, 170);
+		gluLookAt(0, 0, 1, 0, 0, 0, 0, 1, 0);
 
 		glMatrixMode(GL_MODELVIEW);
 		glLoadIdentity();
-		gluLookAt(0, 0, 6,     0, 0, 0,     0, 1, 0);
+		gluLookAt(0, 0, 6, 0, 0, 0, 0, 1, 0);
 		glDepthFunc(GL_LEQUAL);
 		glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
 
 	}
 	
-	glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
-    glLoadIdentity();
+	/* Checking mouse cursor position and stop program if it changes */
+	if(mousePos->iRootX > 0 && mousePos->iRootY > 0
+		&& iStartMousePosX == IMPOSSIBLE_VAL && iStartMousePosY == IMPOSSIBLE_VAL)
+	{
+		iStartMousePosX = mousePos->iRootX;
+		iStartMousePosY = mousePos->iRootY;
+	}
+	else if((iStartMousePosX != IMPOSSIBLE_VAL || iStartMousePosY != IMPOSSIBLE_VAL)
+			&& ((iStartMousePosX != mousePos->iRootX) || (iStartMousePosY != mousePos->iRootY)) )
+	{
+		_appExit = 1;
+	}
 
-	glTranslatef(0,0,-2);
-	glTranslatef(0,2.7,0);
-	glRotatef(_fDelta,0,1,0);
-	
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glLoadIdentity();
+
+	glTranslatef(0, 0, -2);
+	glTranslatef(0, 2.7, 0);
+	glRotatef(_fDelta, 0, 1, 0);
+
 	_uCurrMillis = get_millisec();
-	_fDelta += 0.05 * float(_uCurrMillis-_uPrevMillis);
+	_fDelta += 0.05 * float(_uCurrMillis - _uPrevMillis);
 	_uPrevMillis = _uCurrMillis;
 	//delta+=0.3;
-	if(_fDelta>360)
-		_fDelta=0;
+	if (_fDelta > 360)
+		_fDelta = 0;
 
-	for(int i=0; i<13;i++)
+	for (int i = 0; i < 13; i++)
 	{
-		glTranslatef(0,-0.4,0);
-		glRotatef(20*cos((_fDelta*3.14)/180),0,1,0);
+		glTranslatef(0, -0.4, 0);
+		glRotatef(20 * cos((_fDelta * 3.14) / 180), 0, 1, 0);
 
-		glColor3f(1, sin((_fDelta*3.14)/180*i), cos((_fDelta*3.14)/180*i));
+		glColor3f(1, sin((_fDelta * 3.14) / 180 * i), cos((_fDelta * 3.14) / 180 * i));
 		glPushMatrix();
-		   glTranslatef(-0.8,0,0);
-			 gluSphere (_quadrObj, 0.2, 30, 30);
+		glTranslatef(-0.8, 0, 0);
+		gluSphere(_quadrObj, 0.2, 30, 30);
 		glPopMatrix();
 
 		glPushMatrix();
-		   glTranslatef(0.8,0,0);
-			 gluSphere (_quadrObj, 0.2, 30, 30);
+		glTranslatef(0.8, 0, 0);
+		gluSphere(_quadrObj, 0.2, 30, 30);
 		glPopMatrix();
 
 		glPushMatrix();
-		glColor3f(cos((_fDelta*3.14)/180*i), 1, sin((_fDelta*3.14)/180*i));
-		   glTranslatef(-0.6,0,0);
-		   glRotatef(90,0,1,0);
-		   gluCylinder (_quadrObj, 0.07, 0.07, 1.3, 30, 1);
+		glColor3f(cos((_fDelta * 3.14) / 180 * i), 1, sin((_fDelta * 3.14) / 180 * i));
+		glTranslatef(-0.6, 0, 0);
+		glRotatef(90, 0, 1, 0);
+		gluCylinder(_quadrObj, 0.07, 0.07, 1.3, 30, 1);
 		glPopMatrix();
 	}
 
-    glFlush();
+	glFlush();
 
 }
+
+
+void events_update(XEvent *event)
+{
+	switch (event->type)
+	{
+		case ButtonPress:
+			_appExit = 1;
+		return;
+		case KeyPress:
+			_appExit = 1;
+		return;
+	}
+}
+
 /*
  * 
  */
 int main(int argc, char** argv)
 {
-	cGLXWindow				window;
-	
-	
+	cGLXWindow window;
+
 	window.create_window(800, 600, "dna", redraw_window);
-	
+	window.init_events_callback(events_update);
+
 	window.hide_cursor();
 	window.set_window_fullscreen_popup();
-	
-	while( 0 < window.update_window() )
+
+	while (0 < window.update_window() && _appExit == 0)
 	{
 		sleep_millisec(1);
 	}
 
-	
 	window.show_cursor();
 
 	return 0;
