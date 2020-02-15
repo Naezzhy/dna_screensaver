@@ -39,6 +39,7 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include <stdio.h>
+#include <string.h>
 
 #include <X11/X.h>
 #include <X11/Xlib.h>
@@ -55,12 +56,30 @@
 class cGLXWindow
 {
 public:
+	
+	struct	sXMouseCursPos
+	{
+		int32_t	iRootX;
+		int32_t	iRootY;
+		int32_t	iWinX;
+		int32_t	iWinY;
+	};
+	
+	struct	sWindowState
+	{
+		uint32_t uWidth; 
+		uint32_t uHeight;
+		uint8_t initFlag;
+		uint8_t resizeFlag;
+		uint8_t destroyFlag;
+	};
+	
 				cGLXWindow();
 	virtual		~cGLXWindow();
 	int32_t		create_window(	uint32_t uWidth, 
 								uint32_t uHeight, 
 								const char *szWinCaption,
-								void (*)(uint8_t, uint8_t, uint32_t, uint32_t));
+								void (*)(sWindowState*, sXMouseCursPos*));
 	int32_t		update_window(void);
 	void		destroy_window();
 	int32_t		set_window_size(uint32_t uWidth, uint32_t uHeight);
@@ -70,6 +89,7 @@ public:
 	void		show_cursor(void);
 	Window		get_window_XID(void);
 	Display*	get_window_display();
+	int32_t		init_events_callback(void (*)(XEvent* event));
 	
 private:
 	
@@ -77,7 +97,8 @@ private:
 	int32_t		set_fullscreen(void);
 	
 	/* Callback for class returns width, height, init and resize flag */
-	void	(*redraw_callback)(uint8_t initFlag, uint8_t resizeFlag, uint32_t uWidth, uint32_t uHeight);
+	void	(*redraw_callback)(sWindowState *ws, sXMouseCursPos *mousePos);
+	void	(*events_callback)(XEvent* event);
 	
 	Display					*display;
 	Window					window;
@@ -91,8 +112,12 @@ private:
 	XWindowAttributes		gwa;
 	Atom					wmDelete;
 	
-	uint32_t				uCurrentWidth;
-	uint32_t				uCurrentHeight;
+	sWindowState			ws;
+
+	/* For mouse pointer */
+	sXMouseCursPos			mousePos;
+	Window					returnedWindow;
+    uint32_t				uMask;
 	
 };
 
@@ -104,12 +129,13 @@ cGLXWindow()
 	window = 0;
 	cmap = 0;
 	vi = NULL;
-	uCurrentWidth = 0;
-	uCurrentHeight = 0;
 	glc = NULL;
 	wmDelete = 0;
 	
+	memset(&ws, 0, sizeof(ws));
+	
 	redraw_callback = NULL;
+	events_callback = NULL;
 }
 
 
@@ -117,6 +143,14 @@ cGLXWindow::
 ~cGLXWindow()
 {
 	destroy_window();
+}
+
+
+int32_t 
+cGLXWindow::init_events_callback( void(*callback_func)(XEvent* event) )
+{
+	events_callback = (void (*)(XEvent*))callback_func;
+	return 1;
 }
 
 /*
@@ -127,6 +161,11 @@ destroy_window()
 {
 	if(glc)
 	{
+		ws.initFlag = 0;
+		ws.resizeFlag = 0;
+		ws.destroyFlag = 1;
+		redraw_callback(&ws, &mousePos);
+		
 		if(!glXMakeCurrent(display, None, NULL))
 		{
 			fprintf(stderr, "Could not release drawing context\n\r");
@@ -153,9 +192,25 @@ destroy_window()
  */
 int32_t cGLXWindow::
 create_window(uint32_t uWidth, uint32_t uHeight, const char *szWinCaption, 
-			  void(*callback_func)(uint8_t initFlag, uint8_t resizeFlag, uint32_t uWidth, uint32_t uHeight))
+			  void(*callback_func)(sWindowState *ws, sXMouseCursPos *mousePos))
 {
-	GLint att[] = {GLX_RGBA, GLX_DEPTH_SIZE, 24, GLX_DOUBLEBUFFER, None};
+	GLint att[] = 
+	{   
+//		GLX_X_RENDERABLE    , True,
+		GLX_DRAWABLE_TYPE   , GLX_WINDOW_BIT,
+		GLX_RENDER_TYPE     , GLX_RGBA_BIT,
+		GLX_X_VISUAL_TYPE   , GLX_TRUE_COLOR,
+		GLX_RED_SIZE        , 8,
+		GLX_GREEN_SIZE      , 8,
+		GLX_BLUE_SIZE       , 8,
+		GLX_ALPHA_SIZE      , 8,
+		GLX_DEPTH_SIZE      , 24,
+		GLX_STENCIL_SIZE    , 8,
+		GLX_DOUBLEBUFFER    , True,
+		//GLX_SAMPLE_BUFFERS  , 1,
+		//GLX_SAMPLES         , 4,
+		None
+	};
 	Window		rootWindow = 0;
 	
 	if(callback_func == NULL)
@@ -164,7 +219,7 @@ create_window(uint32_t uWidth, uint32_t uHeight, const char *szWinCaption,
 		return -1;
 	}
 	
-	redraw_callback = (void (*)(uint8_t, uint8_t, uint32_t, uint32_t))callback_func;
+	redraw_callback = (void (*)(sWindowState*, sXMouseCursPos*))callback_func;
 	
 	if(uWidth == 0 && uHeight == 0)
 	{
@@ -188,8 +243,8 @@ create_window(uint32_t uWidth, uint32_t uHeight, const char *szWinCaption,
 		window = 0;
 	}
 	
-	uCurrentWidth = uWidth;
-	uCurrentHeight = uHeight;
+	ws.uWidth = uWidth;
+	ws.uHeight = uHeight;
 	
 /****************************** Begin init  ***********************************/	
 	display = XOpenDisplay( NULL );
@@ -274,8 +329,15 @@ create_window(uint32_t uWidth, uint32_t uHeight, const char *szWinCaption,
 	
 //	XFlush(display);
 	
+//	XGrabKeyboard(display, window, True, GrabModeAsync, GrabModeAsync, CurrentTime);
+//    XGrabPointer(display, window, True, ButtonPressMask, 
+//					GrabModeAsync, GrabModeAsync, window, None, CurrentTime);
+	
 	/* Set all flags in first running redraw */
-	redraw_callback(1, 1, uCurrentWidth, uCurrentHeight);
+	ws.initFlag = 1;
+	ws.resizeFlag = 1;
+	ws.destroyFlag = 0;
+	redraw_callback(&ws, &mousePos);
 	glXSwapBuffers(display, window);
 	
 	return 1;
@@ -406,7 +468,7 @@ set_window_fullscreen_popup()
 	XSendEvent(display, RootWindow(display, screen), 0, SubstructureNotifyMask | SubstructureRedirectMask, &e);
 	
 	XFlush(display);
-
+	
 	return 1;
 }
 
@@ -528,24 +590,33 @@ update_window(void)
 	{
 		XNextEvent(display, &event);
 		
+		if(events_callback)
+			events_callback(&event);
+		
 		switch (event.type)
 		{
 			case Expose:
 				if (event.xexpose.count != 0)
 					break;
 
-				redraw_callback(0, 0, uCurrentWidth, uCurrentHeight);
+				ws.initFlag = 0;
+				ws.resizeFlag = 0;
+				ws.destroyFlag = 0;
+				redraw_callback(&ws, &mousePos);
 				glXSwapBuffers(display, window);
 			return 1;
 			case ConfigureNotify:
 				/* Set resize flag only if window size was changed */
-				if ((event.xconfigure.width != uCurrentWidth) || 
-					(event.xconfigure.height != uCurrentHeight))
+				if ((event.xconfigure.width != ws.uWidth) || 
+					(event.xconfigure.height != ws.uHeight))
 				{
-					uCurrentWidth = event.xconfigure.width;
-					uCurrentHeight = event.xconfigure.height;
+					ws.uWidth = event.xconfigure.width;
+					ws.uHeight = event.xconfigure.height;
 						
-					redraw_callback(0, 1, uCurrentWidth, uCurrentHeight);
+					ws.initFlag = 0;
+					ws.resizeFlag = 1;
+					ws.destroyFlag = 0;
+					redraw_callback(&ws, &mousePos);
 					glXSwapBuffers(display, window);
 				}
 				
@@ -557,19 +628,45 @@ update_window(void)
 			case ButtonPress:
                     
             return 1;
+			case ButtonRelease:
+
+            return 1;
             case KeyPress:
+				if(events_callback)
+					return 1;
+
 				if (XLookupKeysym(&event.xkey, 0) == XK_Escape)
 				{
 					destroy_window();
 					return -1;
 				}
 			return 1;
+            case KeyRelease:
+				
+			return 1;
 		}
 		
 	}
 	else
 	{
-		redraw_callback(0, 0, uCurrentWidth, uCurrentHeight);
+		/* Simple redraw GL window */
+		/* Getting mouse cursor position */
+		XQueryPointer(
+						display, 
+						window, 
+						&returnedWindow,
+						&returnedWindow, 
+						&mousePos.iRootX, 
+						&mousePos.iRootY, 
+						&mousePos.iWinX, 
+						&mousePos.iWinY,
+						&uMask
+					);
+	
+		ws.initFlag = 0;
+		ws.resizeFlag = 0;
+		ws.destroyFlag = 0;
+		redraw_callback(&ws, &mousePos);
 		glXSwapBuffers(display, window);
 	}
 	
